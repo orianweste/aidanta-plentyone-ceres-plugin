@@ -14,7 +14,8 @@
         {
             "key": "AidantaChatbotConnector\\Containers\\WidgetBootstrapContainer",
             "name": "Aidanta Chatbot Widget",
-            "description": "Laedt den Aidanta-Chatbot mit verifiziertem Kundenkontext (Hybrid). Mit einem global geladenen Container des Themes verknuepfen (z. B. Skript-Container/Footer)."
+            "description": "Laedt den Aidanta-Chatbot mit verifiziertem Kundenkontext (Hybrid). Wird per defaultLayoutContainer automatisch global (auf allen Seiten) eingebunden.",
+            "defaultLayoutContainer": "Ceres::Script.Loader"
         }
     ]
 }

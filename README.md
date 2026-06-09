@@ -51,9 +51,11 @@ Ceres-Seite (gecached)
    - **Widget-Token der Chatbot-Anbindung**
    - **API-Key** (Scope `chatbot.session.issue`)
    - **Session-Gültigkeit in Sekunden** – Standard `3600`
-3. Den DataProvider **„Aidanta Chatbot Widget"** mit einem **global geladenen Container** des Themes
-   verknüpfen (z. B. ein Skript-/Footer-Container, der auf allen Seiten lädt) und das Plugin-Set
-   speichern/deployen.
+3. Das Plugin-Set **deployen/provisionieren**. Der DataProvider **„Aidanta Chatbot Widget"** wird per
+   `defaultLayoutContainer` automatisch im globalen Container **`Ceres::Script.Loader`** eingebunden
+   (lädt auf **allen** Seiten) — i. d. R. **kein** manuelles Verknüpfen nötig.
+   Falls dein Build doch eine Verknüpfung verlangt: Plugin → **Container-Verknüpfungen** →
+   „Aidanta Chatbot Widget" → `Script.Loader` (alternativ `Script.AfterScriptsLoaded`).
 
 > Tipp zum Testen: Der **Vorschau-Modus** der Plugin-Übersicht umgeht das Content-Caching – ideal,
 > um eingeloggt vs. Gast sofort zu prüfen, ohne 5 Minuten auf die Cache-Invalidierung zu warten.
