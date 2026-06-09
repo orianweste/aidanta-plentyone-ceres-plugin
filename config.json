@@ -1,0 +1,30 @@
+[
+    {
+        "tab": "Aidanta Chatbot",
+        "key": "apiBaseUrl",
+        "label": "Aidanta Base-URL",
+        "type": "text",
+        "default": "https://portal.aidanta.de"
+    },
+    {
+        "tab": "Aidanta Chatbot",
+        "key": "widgetToken",
+        "label": "Widget-Token der Chatbot-Anbindung",
+        "type": "text",
+        "default": ""
+    },
+    {
+        "tab": "Aidanta Chatbot",
+        "key": "apiKey",
+        "label": "API-Key (Scope: chatbot.session.issue)",
+        "type": "password",
+        "default": ""
+    },
+    {
+        "tab": "Aidanta Chatbot",
+        "key": "ttlSeconds",
+        "label": "Session-Gueltigkeit in Sekunden (60-86400)",
+        "type": "text",
+        "default": "3600"
+    }
+]

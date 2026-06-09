@@ -1,0 +1,20 @@
+{
+    "name": "AidantaChatbotConnector",
+    "namespace": "AidantaChatbotConnector",
+    "type": "template",
+    "author": "Aidanta",
+    "version": "1.0.0",
+    "description": "Bindet den Aidanta-Chatbot in plentyShop Ceres ein und uebergibt den eingeloggten Kunden (Kundennummer, E-Mail) faelschungssicher per serverseitigem Hybrid-Handshake an Aidanta.",
+    "serviceProvider": "AidantaChatbotConnector\\Providers\\AidantaChatbotConnectorServiceProvider",
+    "require": [],
+    "dependencies": {
+        "guzzlehttp/guzzle": "6.3.*"
+    },
+    "dataProviders": [
+        {
+            "key": "AidantaChatbotConnector\\Containers\\WidgetBootstrapContainer",
+            "name": "Aidanta Chatbot Widget",
+            "description": "Laedt den Aidanta-Chatbot mit verifiziertem Kundenkontext (Hybrid). Mit einem global geladenen Container des Themes verknuepfen (z. B. Skript-Container/Footer)."
+        }
+    ]
+}

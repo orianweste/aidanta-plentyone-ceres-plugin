@@ -1,0 +1,42 @@
+<script>
+(function () {
+    // Doppelte Einbindung vermeiden (falls der Container mehrfach geladen wird).
+    if (window.__aidantaChatbotLoaded) { return; }
+    window.__aidantaChatbotLoaded = true;
+
+    var BASE = '{{ apiBaseUrl|e('js') }}';
+    var TOKEN = '{{ widgetToken|e('js') }}';
+
+    if (!BASE || !TOKEN) { return; }
+
+    var WIDGET = BASE.replace(/\/+$/, '') + '/chatbot/widget.js';
+
+    function load(attr, val) {
+        var s = document.createElement('script');
+        s.src = WIDGET;
+        s.async = true;
+        if (attr) { s.setAttribute(attr, val); }
+        (document.body || document.head).appendChild(s);
+    }
+
+    // Same-origin Handshake: der Shop-Server kennt ueber die Session den
+    // eingeloggten Kontakt und stellt (nur dann) ein Hybrid-Session-Token aus.
+    try {
+        fetch('/aidanta-chatbot/handshake', {
+            credentials: 'same-origin',
+            headers: { 'Accept': 'application/json' }
+        })
+            .then(function (r) { return r.ok ? r.json() : {}; })
+            .then(function (d) {
+                if (d && d.session_token) {
+                    load('data-session-token', d.session_token); // eingeloggt -> verifizierter Kunde
+                } else {
+                    load('data-token', TOKEN); // Gast -> anonymer Chatbot
+                }
+            })
+            .catch(function () { load('data-token', TOKEN); });
+    } catch (e) {
+        load('data-token', TOKEN);
+    }
+})();
+</script>
