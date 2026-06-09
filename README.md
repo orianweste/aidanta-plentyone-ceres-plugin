@@ -47,7 +47,6 @@ Ceres-Seite (gecached)
 1. Plugin in ein Plugin-Set des Shops einspielen (Git-Anbindung oder ZIP-Upload), bereitstellen und
    in die Produktivumgebung deployen.
 2. Plugin-Konfiguration ausfüllen (Plugin-Übersicht → dieses Plugin → Konfiguration):
-   - **Aidanta Base-URL** – z. B. `https://portal.aidanta.de`
    - **Widget-Token der Chatbot-Anbindung**
    - **API-Key** (Scope `chatbot.session.issue`)
    - **Session-Gültigkeit in Sekunden** – Standard `3600`
@@ -74,7 +73,7 @@ Ceres-Seite (gecached)
 | Datei | Zweck |
 | --- | --- |
 | `plugin.json` | Plugin-Definition, DataProvider (Container), Guzzle-Abhängigkeit |
-| `config.json` | Konfigurationsfelder (Base-URL, Widget-Token, API-Key, TTL) |
+| `config.json` | Konfigurationsfelder (Widget-Token, API-Key, TTL) |
 | `src/Providers/…ServiceProvider.php` | Registriert den RouteServiceProvider |
 | `src/Providers/…RouteServiceProvider.php` | `GET /aidanta-chatbot/handshake` |
 | `src/Controllers/HandshakeController.php` | Kontakt → Kontext → Token ausstellen |

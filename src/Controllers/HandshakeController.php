@@ -26,6 +26,12 @@ class HandshakeController extends Controller
 {
     use Loggable;
 
+    /**
+     * Aidanta-Portal-URL (fix). Bewusst hartkodiert statt konfigurierbar:
+     * fuer Haendler immer identisch, ein editierbares Feld waere nur ein Stolperstein.
+     */
+    public const API_BASE_URL = 'https://portal.aidanta.de';
+
     public function issue(
         AccountService $accountService,
         ContactRepositoryContract $contactRepository,
@@ -40,14 +46,13 @@ class HandshakeController extends Controller
             return $response->json(['session_token' => null]);
         }
 
-        $apiBaseUrl = trim((string) $config->get('AidantaChatbotConnector.apiBaseUrl'));
         $widgetToken = trim((string) $config->get('AidantaChatbotConnector.widgetToken'));
         $apiKey = trim((string) $config->get('AidantaChatbotConnector.apiKey'));
         $ttlSeconds = (int) $config->get('AidantaChatbotConnector.ttlSeconds', 3600);
 
-        if ($apiBaseUrl === '' || $widgetToken === '' || $apiKey === '') {
+        if ($widgetToken === '' || $apiKey === '') {
             $this->getLogger(__METHOD__)
-                ->error('AidantaChatbotConnector: Plugin-Konfiguration unvollstaendig (Base-URL, Widget-Token oder API-Key fehlt).');
+                ->error('AidantaChatbotConnector: Plugin-Konfiguration unvollstaendig (Widget-Token oder API-Key fehlt).');
 
             return $response->json(['session_token' => null]);
         }
@@ -59,7 +64,7 @@ class HandshakeController extends Controller
         }
 
         $result = $libCall->call('AidantaChatbotConnector::issueSession', [
-            'apiBaseUrl' => $apiBaseUrl,
+            'apiBaseUrl' => self::API_BASE_URL,
             'apiKey' => $apiKey,
             'widgetToken' => $widgetToken,
             'ttlSeconds' => $ttlSeconds > 0 ? $ttlSeconds : 3600,

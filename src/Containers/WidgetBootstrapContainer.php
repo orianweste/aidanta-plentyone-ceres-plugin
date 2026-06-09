@@ -2,6 +2,7 @@
 
 namespace AidantaChatbotConnector\Containers;
 
+use AidantaChatbotConnector\Controllers\HandshakeController;
 use Plenty\Plugin\ConfigRepository;
 use Plenty\Plugin\Templates\Twig;
 
@@ -17,7 +18,7 @@ class WidgetBootstrapContainer
     public function call(Twig $twig, ConfigRepository $config): string
     {
         return $twig->render('AidantaChatbotConnector::content.WidgetBootstrap', [
-            'apiBaseUrl' => trim((string) $config->get('AidantaChatbotConnector.apiBaseUrl')),
+            'apiBaseUrl' => HandshakeController::API_BASE_URL,
             'widgetToken' => trim((string) $config->get('AidantaChatbotConnector.widgetToken')),
         ]);
     }
