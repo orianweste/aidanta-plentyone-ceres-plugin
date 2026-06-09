@@ -16,7 +16,7 @@
     {
         "tab": "Aidanta Chatbot",
         "key": "apiKey",
-        "label": "API-Key (Scope: chatbot.session.issue)",
+        "label": "Aidanta API-Key – Der Key wird im Aidanta-Kundenbereich unter Einstellungen → API-Keys angelegt.",
         "type": "password",
         "default": ""
     },
