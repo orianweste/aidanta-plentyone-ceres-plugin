@@ -1,8 +1,12 @@
 <script>
 (function () {
     // Doppelte Einbindung vermeiden (falls der Container mehrfach geladen wird).
-    if (window.__aidantaChatbotLoaded) { return; }
-    window.__aidantaChatbotLoaded = true;
+    // WICHTIG: eigener Marker — NICHT window.__aidantaChatbotLoaded benutzen!
+    // Das ist der Double-Init-Guard von widget.js selbst; bei Kollision haelt
+    // widget.js sich faelschlich fuer bereits geladen und bricht sofort ab
+    // (kein Config-Request, kein Widget).
+    if (window.__aidantaBootstrapLoaded) { return; }
+    window.__aidantaBootstrapLoaded = true;
 
     var BASE = '{{ apiBaseUrl|e('js') }}';
     var TOKEN = '{{ widgetToken|e('js') }}';
