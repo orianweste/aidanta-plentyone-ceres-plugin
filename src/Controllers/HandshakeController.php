@@ -87,36 +87,132 @@ class HandshakeController extends Controller
      * Baut den Aidanta-Kundenkontext aus dem eingeloggten Plenty-Kontakt.
      *
      * identities[].provider='plentyone' bindet die personenbezogene Auskunft im
-     * Bot strikt an die PlentyOne-Tools genau dieser Kennung.
+     * Bot strikt an die PlentyOne-Tools genau dieser Kennung. identities[].contact_id
+     * ist die EINDEUTIGE Kontakt-ID — Aidanta scopt Bestell-Auskuenfte primaer darueber
+     * (eine E-Mail kann an mehreren Kontakten haengen, die Kontakt-ID nie).
      *
-     * @return array<string, mixed>|null  null, wenn weder E-Mail noch Kundennummer vorhanden
+     * @return array<string, mixed>|null  null, wenn der Kontakt nicht ladbar ist
      */
     private function buildCustomerPayload(ContactRepositoryContract $contactRepository, int $contactId): ?array
     {
-        /** @var Contact $contact */
-        $contact = $contactRepository->findContactById($contactId);
+        // Robustheit: findContactById darf den Handshake NIE mit einer uncaught Exception
+        // abbrechen (sonst HTTP 500 statt sauberem session_token:null → Login schlaegt still
+        // fehl). Erst mit ['options'] (E-Mail-Fallback) versuchen, bei Fehler ohne; im
+        // Zweifel Gast.
+        $contact = null;
 
-        $email = isset($contact->email) ? trim((string) $contact->email) : '';
-        // $contact->number = Kundennummer. Hinweis: einzelne Importe befuellen
-        // stattdessen $contact->externalId -> im Zweifel per dd($contact) pruefen.
-        $customerNumber = isset($contact->number) ? trim((string) $contact->number) : '';
+        try {
+            /** @var Contact|null $contact */
+            $contact = $contactRepository->findContactById($contactId, ['options']);
+        } catch (\Throwable $e) {
+            try {
+                /** @var Contact|null $contact */
+                $contact = $contactRepository->findContactById($contactId);
+            } catch (\Throwable $e2) {
+                $this->getLogger(__METHOD__)
+                    ->warning('AidantaChatbotConnector: Kontakt konnte nicht geladen werden.', [
+                        'contactId' => $contactId,
+                        'error' => $e2->getMessage(),
+                    ]);
 
-        if ($email === '' && $customerNumber === '') {
+                return null;
+            }
+        }
+
+        if ($contact === null) {
             return null;
         }
 
+        $email = $this->resolveContactEmail($contact);
+        $customerNumber = $this->resolveCustomerNumber($contact);
         $name = trim(((string) ($contact->firstName ?? '')).' '.((string) ($contact->lastName ?? '')));
 
+        // Die plenty-Kontakt-ID ist die eindeutige, IMMER vorhandene Kennung — der
+        // Payload wird darum immer gebaut (auch ohne Kundennummer/E-Mail).
         return [
             'name' => $name !== '' ? $name : null,
             'email' => $email !== '' ? $email : null,
             'identities' => [
                 [
                     'provider' => 'plentyone',
+                    'contact_id' => $contactId,
                     'customer_number' => $customerNumber !== '' ? $customerNumber : null,
                     'email' => $email !== '' ? $email : null,
                 ],
             ],
         ];
+    }
+
+    /**
+     * E-Mail des Kontakts. plenty befuellt $contact->email nicht zuverlaessig (die
+     * Adresse liegt oft nur in den Kontakt-Options, typeId 2) -> dort als Fallback lesen.
+     */
+    private function resolveContactEmail(Contact $contact): string
+    {
+        $email = isset($contact->email) ? trim((string) $contact->email) : '';
+        if ($email !== '') {
+            return $email;
+        }
+
+        $options = $contact->options ?? null;
+        if (is_iterable($options)) {
+            foreach ($options as $option) {
+                $typeId = is_object($option) ? ($option->typeId ?? null) : (is_array($option) ? ($option['typeId'] ?? null) : null);
+                if ((int) $typeId !== 2) {
+                    continue;
+                }
+                foreach ($this->optionValues($option) as $value) {
+                    if (strpos($value, '@') !== false) {
+                        return $value;
+                    }
+                }
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * Kundennummer; der String "null" und Leerwerte werden verworfen, Fallback auf
+     * externalId (manche Importe befuellen die Kundennummer dort).
+     */
+    private function resolveCustomerNumber(Contact $contact): string
+    {
+        $number = isset($contact->number) ? trim((string) $contact->number) : '';
+
+        if ($number === '' || strtolower($number) === 'null') {
+            $number = isset($contact->externalId) ? trim((string) $contact->externalId) : '';
+        }
+
+        return strtolower($number) === 'null' ? '' : $number;
+    }
+
+    /**
+     * Skalare Werte einer Kontakt-Option (Struktur variiert je plenty-Version:
+     * ->value bzw. ->values[].value).
+     *
+     * @param  mixed  $option
+     * @return array<int, string>
+     */
+    private function optionValues($option): array
+    {
+        $out = [];
+
+        $direct = is_object($option) ? ($option->value ?? null) : (is_array($option) ? ($option['value'] ?? null) : null);
+        if (is_string($direct) && trim($direct) !== '') {
+            $out[] = trim($direct);
+        }
+
+        $values = is_object($option) ? ($option->values ?? null) : (is_array($option) ? ($option['values'] ?? null) : null);
+        if (is_iterable($values)) {
+            foreach ($values as $v) {
+                $vv = is_object($v) ? ($v->value ?? null) : (is_array($v) ? ($v['value'] ?? null) : null);
+                if (is_string($vv) && trim($vv) !== '') {
+                    $out[] = trim($vv);
+                }
+            }
+        }
+
+        return $out;
     }
 }
