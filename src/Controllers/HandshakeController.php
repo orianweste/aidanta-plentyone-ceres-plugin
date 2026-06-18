@@ -154,8 +154,9 @@ class HandshakeController extends Controller
             return $email;
         }
 
+        // array/Traversable explizit prüfen (manche Typ-Helper sind in der plenty-Sandbox gesperrt).
         $options = $contact->options ?? null;
-        if (is_iterable($options)) {
+        if (is_array($options) || $options instanceof \Traversable) {
             foreach ($options as $option) {
                 $typeId = is_object($option) ? ($option->typeId ?? null) : (is_array($option) ? ($option['typeId'] ?? null) : null);
                 if ((int) $typeId !== 2) {
@@ -204,7 +205,7 @@ class HandshakeController extends Controller
         }
 
         $values = is_object($option) ? ($option->values ?? null) : (is_array($option) ? ($option['values'] ?? null) : null);
-        if (is_iterable($values)) {
+        if (is_array($values) || $values instanceof \Traversable) {
             foreach ($values as $v) {
                 $vv = is_object($v) ? ($v->value ?? null) : (is_array($v) ? ($v['value'] ?? null) : null);
                 if (is_string($vv) && trim($vv) !== '') {
