@@ -8,6 +8,7 @@ use Plenty\Modules\Frontend\Services\AccountService;
 use Plenty\Modules\Plugin\Libs\Contracts\LibraryCallContract;
 use Plenty\Plugin\ConfigRepository;
 use Plenty\Plugin\Controller;
+use Plenty\Plugin\Http\Request;
 use Plenty\Plugin\Http\Response;
 use Plenty\Plugin\Log\Loggable;
 
@@ -37,12 +38,27 @@ class HandshakeController extends Controller
         ContactRepositoryContract $contactRepository,
         ConfigRepository $config,
         LibraryCallContract $libCall,
+        Request $request,
         Response $response
     ) {
+        // Diagnose-Modus: ?debug=1 gibt KEINEN Session-Token aus, sondern eine
+        // PII-freie Statusansicht (was der Handshake serverseitig sieht/berechnet).
+        // Zum Debuggen im Live-Shop eingeloggt /aidanta-chatbot/handshake?debug=1 aufrufen.
+        $debug = (string) $request->get('debug') === '1';
+
         $contactId = (int) $accountService->getAccountContactId();
 
         // Gast / nicht eingeloggt -> kein Kundenkontext.
         if ($contactId <= 0) {
+            if ($debug) {
+                return $response->json([
+                    'debug' => true,
+                    'logged_in' => false,
+                    'contact_id' => 0,
+                    'note' => 'Kein eingeloggter Kontakt in der plenty-Session (getAccountContactId() <= 0).',
+                ]);
+            }
+
             return $response->json(['session_token' => null]);
         }
 
@@ -54,10 +70,44 @@ class HandshakeController extends Controller
             $this->getLogger(__METHOD__)
                 ->error('AidantaChatbotConnector: Plugin-Konfiguration unvollstaendig (Widget-Token oder API-Key fehlt).');
 
+            if ($debug) {
+                return $response->json([
+                    'debug' => true,
+                    'logged_in' => true,
+                    'contact_id' => $contactId,
+                    'config_complete' => false,
+                    'has_widget_token' => $widgetToken !== '',
+                    'has_api_key' => $apiKey !== '',
+                    'note' => 'Plugin-Konfiguration unvollstaendig (Widget-Token oder API-Key fehlt).',
+                ]);
+            }
+
             return $response->json(['session_token' => null]);
         }
 
         $customer = $this->buildCustomerPayload($contactRepository, $contactId);
+
+        if ($debug) {
+            $identity = (is_array($customer) && isset($customer['identities'][0]) && is_array($customer['identities'][0]))
+                ? $customer['identities'][0]
+                : [];
+
+            return $response->json([
+                'debug' => true,
+                'logged_in' => true,
+                'contact_id' => $contactId,
+                'config_complete' => true,
+                'ttl_seconds' => $ttlSeconds > 0 ? $ttlSeconds : 3600,
+                'payload_built' => $customer !== null,
+                'has_name' => is_array($customer) ? (($customer['name'] ?? null) !== null) : false,
+                'has_email' => is_array($customer) ? (($customer['email'] ?? null) !== null) : false,
+                'identity_provider' => isset($identity['provider']) ? $identity['provider'] : null,
+                'identity_contact_id' => isset($identity['contact_id']) ? $identity['contact_id'] : null,
+                'has_customer_number' => isset($identity['customer_number']) && $identity['customer_number'] !== null,
+                'has_identity_email' => isset($identity['email']) && $identity['email'] !== null,
+                'note' => 'Kundenkontext serverseitig berechnet. Im Debug-Modus wird KEIN Session-Token ausgestellt.',
+            ]);
+        }
 
         if ($customer === null) {
             return $response->json(['session_token' => null]);
