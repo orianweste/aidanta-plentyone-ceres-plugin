@@ -111,10 +111,8 @@ class HandshakeController extends Controller
                 : [];
 
             // Vollständige Lib-Antwort (für Diagnose) — Token entfernen, damit er nie geleakt wird.
-            $resultSafe = is_array($result) ? $result : ['_non_array_type' => gettype($result)];
-            if (is_array($resultSafe)) {
-                unset($resultSafe['session_token']);
-            }
+            $resultSafe = is_array($result) ? $result : ['_non_array' => true];
+            unset($resultSafe['session_token']);
 
             return $response->json([
                 'debug' => true,

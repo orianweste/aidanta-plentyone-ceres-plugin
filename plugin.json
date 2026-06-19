@@ -7,7 +7,7 @@
     "namespace": "AidantaChatbotConnector",
     "type": "template",
     "author": "Aidanta",
-    "version": "1.0.8",
+    "version": "1.0.9",
     "description": "Bindet den Aidanta-Chatbot in plentyShop Ceres ein und uebergibt den eingeloggten Kunden (Kundennummer, E-Mail) faelschungssicher per serverseitigem Hybrid-Handshake an Aidanta.",
     "serviceProvider": "AidantaChatbotConnector\\Providers\\AidantaChatbotConnectorServiceProvider",
     "require": [],
