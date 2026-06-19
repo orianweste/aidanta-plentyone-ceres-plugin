@@ -110,6 +110,12 @@ class HandshakeController extends Controller
                 ? $customer['identities'][0]
                 : [];
 
+            // Vollständige Lib-Antwort (für Diagnose) — Token entfernen, damit er nie geleakt wird.
+            $resultSafe = is_array($result) ? $result : ['_non_array_type' => gettype($result)];
+            if (is_array($resultSafe)) {
+                unset($resultSafe['session_token']);
+            }
+
             return $response->json([
                 'debug' => true,
                 'logged_in' => true,
@@ -128,8 +134,12 @@ class HandshakeController extends Controller
                 'issue_has_token' => $sessionToken !== null,
                 'issue_status' => is_array($result) ? ($result['status'] ?? null) : null,
                 'issue_error' => is_array($result) ? ($result['error'] ?? null) : null,
+                'issue_error_msg' => is_array($result) ? ($result['errorMsg'] ?? null) : null,
                 'issue_message' => is_array($result) ? ($result['message'] ?? null) : null,
-                'note' => 'Kundenkontext + issueSession serverseitig ausgeführt. Token wird im Debug nur als Bool gemeldet.',
+                'issue_result_keys' => is_array($result) ? array_keys($result) : null,
+                'issue_result' => $resultSafe,
+                'endpoint' => self::API_BASE_URL.'/api/v1/chatbot/sessions/issue',
+                'note' => 'Volle Lib-Antwort (ohne Token) zur Diagnose. error:true ohne status/message = plenty-LibraryCall scheiterte vor/außerhalb der Lib.',
             ]);
         }
 
