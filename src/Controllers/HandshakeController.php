@@ -87,6 +87,24 @@ class HandshakeController extends Controller
 
         $customer = $this->buildCustomerPayload($contactRepository, $contactId);
 
+        // Token ausstellen (sofern ein Kundenkontext gebaut werden konnte). Im Debug-Modus
+        // wird derselbe Aufruf ausgeführt, damit die Diagnose den ECHTEN Ausgang von
+        // issueSession (Status/Fehler von Aidanta) zeigt — genau die Stufe, die sonst im
+        // Dunkeln liegt. Der Token-Wert selbst wird im Debug NIE zurückgegeben (nur ein Bool).
+        $result = null;
+        $sessionToken = null;
+        if ($customer !== null) {
+            $result = $libCall->call('AidantaChatbotConnector::issueSession', [
+                'apiBaseUrl' => self::API_BASE_URL,
+                'apiKey' => $apiKey,
+                'widgetToken' => $widgetToken,
+                'ttlSeconds' => $ttlSeconds > 0 ? $ttlSeconds : 3600,
+                'customer' => $customer,
+            ]);
+
+            $sessionToken = is_array($result) ? ($result['session_token'] ?? null) : null;
+        }
+
         if ($debug) {
             $identity = (is_array($customer) && isset($customer['identities'][0]) && is_array($customer['identities'][0]))
                 ? $customer['identities'][0]
@@ -105,23 +123,19 @@ class HandshakeController extends Controller
                 'identity_contact_id' => isset($identity['contact_id']) ? $identity['contact_id'] : null,
                 'has_customer_number' => isset($identity['customer_number']) && $identity['customer_number'] !== null,
                 'has_identity_email' => isset($identity['email']) && $identity['email'] !== null,
-                'note' => 'Kundenkontext serverseitig berechnet. Im Debug-Modus wird KEIN Session-Token ausgestellt.',
+                // ECHTER issueSession-Ausgang (das war die Blackbox):
+                'issue_attempted' => $customer !== null,
+                'issue_has_token' => $sessionToken !== null,
+                'issue_status' => is_array($result) ? ($result['status'] ?? null) : null,
+                'issue_error' => is_array($result) ? ($result['error'] ?? null) : null,
+                'issue_message' => is_array($result) ? ($result['message'] ?? null) : null,
+                'note' => 'Kundenkontext + issueSession serverseitig ausgeführt. Token wird im Debug nur als Bool gemeldet.',
             ]);
         }
 
         if ($customer === null) {
             return $response->json(['session_token' => null]);
         }
-
-        $result = $libCall->call('AidantaChatbotConnector::issueSession', [
-            'apiBaseUrl' => self::API_BASE_URL,
-            'apiKey' => $apiKey,
-            'widgetToken' => $widgetToken,
-            'ttlSeconds' => $ttlSeconds > 0 ? $ttlSeconds : 3600,
-            'customer' => $customer,
-        ]);
-
-        $sessionToken = is_array($result) ? ($result['session_token'] ?? null) : null;
 
         if ($sessionToken === null) {
             $this->getLogger(__METHOD__)
