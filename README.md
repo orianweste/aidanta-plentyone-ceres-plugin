@@ -23,7 +23,7 @@ Ceres-Seite (gecached)
   HandshakeController (serverseitig)
         │ AccountService::getAccountContactId()  → 0? → {session_token: null}
         │ ContactRepositoryContract::findContactById() → Kundennummer + E-Mail
-        │ 2) lib/issueSession.php (Guzzle) → POST {apiBaseUrl}/api/v1/chatbot/sessions/issue
+        │ 2) resources/lib/issueSession.php (Guzzle) → POST {apiBaseUrl}/api/v1/chatbot/sessions/issue
         │    Authorization: Bearer <API-Key>
         │    customer.identities = [{ provider:'plentyone', customer_number, email }]
         ▼
@@ -78,15 +78,17 @@ Ceres-Seite (gecached)
 | `src/Providers/…RouteServiceProvider.php` | `GET /aidanta-chatbot/handshake` |
 | `src/Controllers/HandshakeController.php` | Kontakt → Kontext → Token ausstellen |
 | `src/Containers/WidgetBootstrapContainer.php` | Rendert das Bootstrap-`<script>` |
-| `lib/issueSession.php` | Guzzle-Aufruf an Aidanta `/sessions/issue` |
+| `resources/lib/issueSession.php` | Guzzle-Aufruf an Aidanta `/sessions/issue` (**muss** unter `resources/lib/` liegen — plenty baut nur dort SDK-Library-Services) |
 | `resources/views/content/WidgetBootstrap.twig` | Bootstrap-`<script>` (Handshake → widget.js) |
 
 ## Hinweise / im Ziel-System zu prüfen
 
 - **Kundennummer:** `Contact->number`. Einzelne Importe befüllen stattdessen `Contact->externalId` –
   im Zweifel einmal per `dd($contact)` prüfen.
-- **lib-Ordner & Guzzle-Version:** `lib/` liegt im Plugin-Root, Guzzle wird über `dependencies`
-  (`guzzlehttp/guzzle: 6.3.*`) gezogen. Falls der konkrete LTS-Build eine andere Version pinnt,
-  hier anpassen.
+- **lib-Ordner & Guzzle-Version:** Die Library **muss** unter **`resources/lib/`** liegen (NICHT im
+  Plugin-Root `lib/`) — plenty baut **nur** dort die SDK-Library-Services. Liegt sie falsch, schlägt
+  der `LibraryCall` mit `404 "no services found"` fehl und der Handshake liefert nie ein Token. Guzzle
+  wird über `dependencies` (`guzzlehttp/guzzle: 6.3.*`) gezogen; falls der konkrete LTS-Build eine
+  andere Version pinnt, hier anpassen.
 - **Sprach-Präfix:** Die Handshake-Route wird absolut unter `/aidanta-chatbot/handshake` aufgerufen.
   Bei mehrsprachigen Shops mit Pfad-Präfix ggf. den Bootstrap-Fetch-Pfad anpassen.
