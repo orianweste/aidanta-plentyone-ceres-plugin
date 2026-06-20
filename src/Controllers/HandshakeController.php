@@ -8,7 +8,6 @@ use Plenty\Modules\Frontend\Services\AccountService;
 use Plenty\Modules\Plugin\Libs\Contracts\LibraryCallContract;
 use Plenty\Plugin\ConfigRepository;
 use Plenty\Plugin\Controller;
-use Plenty\Plugin\Http\Request;
 use Plenty\Plugin\Http\Response;
 use Plenty\Plugin\Log\Loggable;
 
@@ -38,27 +37,12 @@ class HandshakeController extends Controller
         ContactRepositoryContract $contactRepository,
         ConfigRepository $config,
         LibraryCallContract $libCall,
-        Request $request,
         Response $response
     ) {
-        // Diagnose-Modus: ?debug=1 gibt KEINEN Session-Token aus, sondern eine
-        // PII-freie Statusansicht (was der Handshake serverseitig sieht/berechnet).
-        // Zum Debuggen im Live-Shop eingeloggt /aidanta-chatbot/handshake?debug=1 aufrufen.
-        $debug = (string) $request->get('debug') === '1';
-
         $contactId = (int) $accountService->getAccountContactId();
 
         // Gast / nicht eingeloggt -> kein Kundenkontext.
         if ($contactId <= 0) {
-            if ($debug) {
-                return $response->json([
-                    'debug' => true,
-                    'logged_in' => false,
-                    'contact_id' => 0,
-                    'note' => 'Kein eingeloggter Kontakt in der plenty-Session (getAccountContactId() <= 0).',
-                ]);
-            }
-
             return $response->json(['session_token' => null]);
         }
 
@@ -70,80 +54,24 @@ class HandshakeController extends Controller
             $this->getLogger(__METHOD__)
                 ->error('AidantaChatbotConnector: Plugin-Konfiguration unvollstaendig (Widget-Token oder API-Key fehlt).');
 
-            if ($debug) {
-                return $response->json([
-                    'debug' => true,
-                    'logged_in' => true,
-                    'contact_id' => $contactId,
-                    'config_complete' => false,
-                    'has_widget_token' => $widgetToken !== '',
-                    'has_api_key' => $apiKey !== '',
-                    'note' => 'Plugin-Konfiguration unvollstaendig (Widget-Token oder API-Key fehlt).',
-                ]);
-            }
-
             return $response->json(['session_token' => null]);
         }
 
         $customer = $this->buildCustomerPayload($contactRepository, $contactId);
 
-        // Token ausstellen (sofern ein Kundenkontext gebaut werden konnte). Im Debug-Modus
-        // wird derselbe Aufruf ausgeführt, damit die Diagnose den ECHTEN Ausgang von
-        // issueSession (Status/Fehler von Aidanta) zeigt — genau die Stufe, die sonst im
-        // Dunkeln liegt. Der Token-Wert selbst wird im Debug NIE zurückgegeben (nur ein Bool).
-        $result = null;
-        $sessionToken = null;
-        if ($customer !== null) {
-            $result = $libCall->call('AidantaChatbotConnector::issueSession', [
-                'apiBaseUrl' => self::API_BASE_URL,
-                'apiKey' => $apiKey,
-                'widgetToken' => $widgetToken,
-                'ttlSeconds' => $ttlSeconds > 0 ? $ttlSeconds : 3600,
-                'customer' => $customer,
-            ]);
-
-            $sessionToken = is_array($result) ? ($result['session_token'] ?? null) : null;
-        }
-
-        if ($debug) {
-            $identity = (is_array($customer) && isset($customer['identities'][0]) && is_array($customer['identities'][0]))
-                ? $customer['identities'][0]
-                : [];
-
-            // Vollständige Lib-Antwort (für Diagnose) — Token entfernen, damit er nie geleakt wird.
-            $resultSafe = is_array($result) ? $result : ['_non_array' => true];
-            unset($resultSafe['session_token']);
-
-            return $response->json([
-                'debug' => true,
-                'logged_in' => true,
-                'contact_id' => $contactId,
-                'config_complete' => true,
-                'ttl_seconds' => $ttlSeconds > 0 ? $ttlSeconds : 3600,
-                'payload_built' => $customer !== null,
-                'has_name' => is_array($customer) ? (($customer['name'] ?? null) !== null) : false,
-                'has_email' => is_array($customer) ? (($customer['email'] ?? null) !== null) : false,
-                'identity_provider' => isset($identity['provider']) ? $identity['provider'] : null,
-                'identity_contact_id' => isset($identity['contact_id']) ? $identity['contact_id'] : null,
-                'has_customer_number' => isset($identity['customer_number']) && $identity['customer_number'] !== null,
-                'has_identity_email' => isset($identity['email']) && $identity['email'] !== null,
-                // ECHTER issueSession-Ausgang (das war die Blackbox):
-                'issue_attempted' => $customer !== null,
-                'issue_has_token' => $sessionToken !== null,
-                'issue_status' => is_array($result) ? ($result['status'] ?? null) : null,
-                'issue_error' => is_array($result) ? ($result['error'] ?? null) : null,
-                'issue_error_msg' => is_array($result) ? ($result['errorMsg'] ?? null) : null,
-                'issue_message' => is_array($result) ? ($result['message'] ?? null) : null,
-                'issue_result_keys' => is_array($result) ? array_keys($result) : null,
-                'issue_result' => $resultSafe,
-                'endpoint' => self::API_BASE_URL.'/api/v1/chatbot/sessions/issue',
-                'note' => 'Volle Lib-Antwort (ohne Token) zur Diagnose. error:true ohne status/message = plenty-LibraryCall scheiterte vor/außerhalb der Lib.',
-            ]);
-        }
-
         if ($customer === null) {
             return $response->json(['session_token' => null]);
         }
+
+        $result = $libCall->call('AidantaChatbotConnector::issueSession', [
+            'apiBaseUrl' => self::API_BASE_URL,
+            'apiKey' => $apiKey,
+            'widgetToken' => $widgetToken,
+            'ttlSeconds' => $ttlSeconds > 0 ? $ttlSeconds : 3600,
+            'customer' => $customer,
+        ]);
+
+        $sessionToken = is_array($result) ? ($result['session_token'] ?? null) : null;
 
         if ($sessionToken === null) {
             $this->getLogger(__METHOD__)
