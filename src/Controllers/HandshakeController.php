@@ -8,6 +8,7 @@ use Plenty\Modules\Frontend\Services\AccountService;
 use Plenty\Modules\Plugin\Libs\Contracts\LibraryCallContract;
 use Plenty\Plugin\ConfigRepository;
 use Plenty\Plugin\Controller;
+use Plenty\Plugin\Http\Request;
 use Plenty\Plugin\Http\Response;
 use Plenty\Plugin\Log\Loggable;
 
@@ -21,6 +22,19 @@ use Plenty\Plugin\Log\Loggable;
  *     ausstellen lassen (API-Key) und dem Browser NUR dieses Token zurueckgeben.
  *
  * Der Browser self-asserted nie eine Identitaet -> kein Faelschungsrisiko.
+ *
+ * Zwei Aufruf-Modi (seit 1.1.0, Immer-Hybrid):
+ *  - OHNE Parameter (Status-/Beweis-Handshake, widget.js): Token NUR fuer
+ *    eingeloggte Kontakte; Gaeste erhalten {session_token: null, logged_in: false}.
+ *    Das Token dient dem Widget als Einmal-Login-Beweis (POST /sessions/{token}/auth).
+ *  - ?issue=guest (Bootstrap): stellt AUCH Gaesten eine anonyme Hybrid-Session
+ *    aus (Issue ohne Kundenkontext). Nur so laeuft das Widget in beiden
+ *    Login-Zustaenden im Hybrid-Modus und der Chat-Verlauf bleibt ueber einen
+ *    Login-/Logout-Reload hinweg DIESELBE Session (die Gast-Session wird beim
+ *    Login serverseitig hochgestuft, statt dass eine zweite, leere entsteht).
+ *
+ * Das explizite logged_in-Flag in der Antwort verhindert, dass das Widget ein
+ * Gast-Token je mit einem Login-Beweis verwechselt.
  */
 class HandshakeController extends Controller
 {
@@ -33,6 +47,7 @@ class HandshakeController extends Controller
     public const API_BASE_URL = 'https://portal.aidanta.de';
 
     public function issue(
+        Request $request,
         AccountService $accountService,
         ContactRepositoryContract $contactRepository,
         ConfigRepository $config,
@@ -40,10 +55,12 @@ class HandshakeController extends Controller
         Response $response
     ) {
         $contactId = (int) $accountService->getAccountContactId();
+        $issueForGuest = (string) $request->get('issue') === 'guest';
 
-        // Gast / nicht eingeloggt -> kein Kundenkontext.
-        if ($contactId <= 0) {
-            return $response->json(['session_token' => null]);
+        // Status-/Beweis-Handshake (widget.js, ohne ?issue=guest): Gast -> kein
+        // Token. Nur der Bootstrap stellt Gast-Sessions aus.
+        if ($contactId <= 0 && ! $issueForGuest) {
+            return $response->json(['session_token' => null, 'logged_in' => false]);
         }
 
         $widgetToken = trim((string) $config->get('AidantaChatbotConnector.widgetToken'));
@@ -54,13 +71,22 @@ class HandshakeController extends Controller
             $this->getLogger(__METHOD__)
                 ->error('AidantaChatbotConnector: Plugin-Konfiguration unvollstaendig (Widget-Token oder API-Key fehlt).');
 
-            return $response->json(['session_token' => null]);
+            // logged_in ehrlich melden: "eingeloggt, aber kein Token" wertet
+            // widget.js als KEIN verlaessliches Signal (statt False-Logout).
+            return $response->json(['session_token' => null, 'logged_in' => $contactId > 0]);
         }
 
-        $customer = $this->buildCustomerPayload($contactRepository, $contactId);
+        $customer = null;
 
-        if ($customer === null) {
-            return $response->json(['session_token' => null]);
+        if ($contactId > 0) {
+            $customer = $this->buildCustomerPayload($contactRepository, $contactId);
+
+            // Kontakt nicht ladbar (transienter plenty-Fehler): Beweis-Handshake
+            // -> kein Token, aber logged_in=true — widget.js behandelt das als
+            // "kein verlaessliches Signal" und meldet KEINEN Logout.
+            if ($customer === null && ! $issueForGuest) {
+                return $response->json(['session_token' => null, 'logged_in' => true]);
+            }
         }
 
         $result = $libCall->call('AidantaChatbotConnector::issueSession', [
@@ -68,6 +94,7 @@ class HandshakeController extends Controller
             'apiKey' => $apiKey,
             'widgetToken' => $widgetToken,
             'ttlSeconds' => $ttlSeconds > 0 ? $ttlSeconds : 3600,
+            // null/leer => anonyme Gast-Session ohne Kundenkontext.
             'customer' => $customer,
         ]);
 
@@ -80,7 +107,15 @@ class HandshakeController extends Controller
                 ]);
         }
 
-        return $response->json(['session_token' => $sessionToken]);
+        // logged_in spiegelt den plenty-Login-Status — unabhaengig davon, ob der
+        // Issue-Call ein Token lieferte. widget.js wertet "logged_in ohne Token"
+        // als kein verlaessliches Signal (verhindert False-Logouts bei
+        // transienten Issue-Fehlern) und akzeptiert ein Token nur zusammen mit
+        // logged_in=true als Login-Beweis (Gast-Token zaehlen nie).
+        return $response->json([
+            'session_token' => $sessionToken,
+            'logged_in' => $contactId > 0,
+        ]);
     }
 
     /**

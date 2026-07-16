@@ -18,20 +18,41 @@ ausstellen. Der Browser überträgt **nie selbst** eine Identität → keine Man
 ```
 Ceres-Seite (gecached)
   └─ Container injiziert Bootstrap-<script> (nicht personalisiert, cache-safe)
-        │ 1) fetch GET /aidanta-chatbot/handshake   (same-origin, plenty-Session-Cookie)
+        │ 0) Aktive Chat-Session im localStorage (aidanta_hybrid_session, ≤ 24 h)?
+        │    → widget.js direkt mit diesem Token laden (kein Handshake/Issue nötig)
+        │ 1) sonst: fetch GET /aidanta-chatbot/handshake?issue=guest   (same-origin, plenty-Session-Cookie)
         ▼
   HandshakeController (serverseitig)
-        │ AccountService::getAccountContactId()  → 0? → {session_token: null}
-        │ ContactRepositoryContract::findContactById() → Kundennummer + E-Mail
+        │ AccountService::getAccountContactId() → eingeloggt: Kundenkontext bauen;
+        │                                          Gast (?issue=guest): customer = null
         │ 2) resources/lib/issueSession.php (Guzzle) → POST {apiBaseUrl}/api/v1/chatbot/sessions/issue
         │    Authorization: Bearer <API-Key>
-        │    customer.identities = [{ provider:'plentyone', customer_number, email }]
+        │    eingeloggt: customer.identities = [{ provider:'plentyone', contact_id, customer_number, email }]
+        │    Gast: OHNE customer → anonyme Session
         ▼
-  Aidanta issue() → setzt verified_customer → { session_token: 'cst_…' }
-        │ 3) Handshake liefert { session_token } an den Browser
+  Aidanta issue() → { session_token: 'cst_…' } (eingeloggt: mit verified_customer)
+        │ 3) Handshake liefert { session_token, logged_in } an den Browser
         ▼
-  Bootstrap lädt widget.js mit data-session-token (eingeloggt) bzw. data-token (Gast)
+  Bootstrap lädt widget.js IMMER mit data-session-token + data-handshake-url
+  (Immer-Hybrid seit 1.1.0 — data-token nur noch als Fallback bei Issue-Fehlern)
 ```
+
+**Immer-Hybrid (1.1.0):** Auch Gäste erhalten eine (anonyme) Hybrid-Session. Nur so bleibt der
+Chat-Verlauf über einen Login-/Logout-Reload hinweg **dieselbe Session**: Beim Login stuft Aidanta
+die Gast-Session hoch („Im Shop angemeldet"-Pille + automatische Beantwortung der offenen,
+anmeldepflichtigen Frage); beim Logout meldet widget.js den Zustand schon beim Verlauf-Laden und
+Aidanta entzieht die Identität mit sichtbarer „Im Shop abgemeldet"-Pille. Der Status-Handshake
+OHNE `?issue=guest` (Login-Beweis für widget.js) liefert Gästen weiterhin
+`{ session_token: null, logged_in: false }` — das explizite `logged_in`-Flag stellt sicher, dass
+ein Gast-Token nie als Login-Beweis gilt.
+
+**Robustheit (Review-Härtungen):** Das Bootstrap verwendet gepinnte Sessions nur, wenn sie
+tatsächlichen Verlauf haben (`aidanta_chat_<token>.lastId > 0` — nie benutzte Tokens leben nur in
+Aidantas Kurzzeit-Cache und wären nach `ttlSeconds` tot), und stellt Gast-Sessions erst nach der
+ersten Nutzer-Interaktion aus (Bots/Crawler lösen keinen Issue-Call aus — schont das
+Session-Budget). Bei Issue-Fehlern (Rate-Limit/Timeout) meldet der Handshake `logged_in` ehrlich:
+„eingeloggt ohne Token" wertet widget.js als *kein Signal* — so kann ein transienter
+Infrastruktur-Fehler nie einen verifizierten Chat fälschlich beenden.
 
 ## Voraussetzungen in Aidanta
 

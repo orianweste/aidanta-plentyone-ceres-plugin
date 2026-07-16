@@ -16,8 +16,13 @@
     var WIDGET = BASE.replace(/\/+$/, '') + '/chatbot/widget.js';
 
     // Same-origin Handshake-Route. Wird dem Widget mitgegeben, damit es den
-    // Login-Status pro Nachricht erneut pruefen kann (Logout-Erkennung).
+    // Login-Status pro Nachricht erneut pruefen kann (Login-/Logout-Erkennung).
     var HANDSHAKE = '/aidanta-chatbot/handshake';
+
+    // widget.js pinnt seine Hybrid-Session unter diesem localStorage-Key
+    // (Konvention aus widget.js: HYBRID_PERSIST_KEY + SESSION_TTL 24 h).
+    var PERSIST_KEY = 'aidanta_hybrid_session';
+    var SESSION_TTL = 24 * 60 * 60 * 1000;
 
     function load(attr, val, extraAttr, extraVal) {
         var s = document.createElement('script');
@@ -28,25 +33,82 @@
         (document.body || document.head).appendChild(s);
     }
 
-    // Same-origin Handshake: der Shop-Server kennt ueber die Session den
-    // eingeloggten Kontakt und stellt (nur dann) ein Hybrid-Session-Token aus.
-    try {
-        fetch(HANDSHAKE, {
-            credentials: 'same-origin',
-            headers: { 'Accept': 'application/json' }
-        })
-            .then(function (r) { return r.ok ? r.json() : {}; })
-            .then(function (d) {
-                if (d && d.session_token) {
-                    // eingeloggt -> verifizierter Kunde + Handshake-URL fuer Logout-Erkennung pro Nachricht
-                    load('data-session-token', d.session_token, 'data-handshake-url', HANDSHAKE);
-                } else {
-                    load('data-token', TOKEN); // Gast -> anonymer Chatbot
-                }
+    // Aktive Chat-Session aus einem frueheren Seitenaufruf? Dann deren Token
+    // direkt wiederverwenden — kein Issue-Call noetig, und die Session (samt
+    // Verlauf) bleibt ueber Login-/Logout-Reloads hinweg DIESELBE. Den
+    // Login-Status gleicht widget.js selbst per Re-Handshake ab (angemeldet-
+    // bzw. abgemeldet-Pille kommt vom Aidanta-Server).
+    //
+    // WICHTIG: Nur Sessions mit tatsaechlichem Chat-Verlauf (lastId > 0 im
+    // aidanta_chat_<token>-Eintrag von widget.js) wiederverwenden. Erst mit der
+    // ersten Nachricht entsteht auf Aidanta-Seite ein dauerhafter Fall — ein nie
+    // benutztes Token lebt nur im Kurzzeit-Cache (ttlSeconds) und waere danach
+    // tot: widget.js wuerde auf diesem Seitenaufruf gar nicht rendern.
+    function pinnedSessionToken() {
+        try {
+            var raw = localStorage.getItem(PERSIST_KEY);
+            if (!raw) { return null; }
+            var data = JSON.parse(raw);
+            if (!data || !data.token || !data.created || (Date.now() - data.created) >= SESSION_TTL) {
+                return null;
+            }
+            var chatState = JSON.parse(localStorage.getItem('aidanta_chat_' + data.token));
+            if (!chatState || !(chatState.lastId > 0)) { return null; }
+            return String(data.token);
+        } catch (e) { /* localStorage gesperrt (Private Mode) -> frisch ausstellen */ }
+        return null;
+    }
+
+    var pinned = pinnedSessionToken();
+    if (pinned) {
+        load('data-session-token', pinned, 'data-handshake-url', HANDSHAKE);
+        return;
+    }
+
+    // Immer-Hybrid (seit 1.1.0): auch Gaeste bekommen eine anonyme
+    // Hybrid-Session (?issue=guest). Nur so laeuft das Widget in beiden
+    // Login-Zustaenden im selben Modus und der Chat-Verlauf uebersteht den
+    // Login-Reload (die Gast-Session wird beim Login serverseitig hochgestuft,
+    // statt dass eine zweite, leere Session im Public-Modus entsteht).
+    // data-token nur noch als Fallback, falls die Ausstellung fehlschlaegt.
+    function issueAndLoad() {
+        try {
+            fetch(HANDSHAKE + '?issue=guest', {
+                credentials: 'same-origin',
+                headers: { 'Accept': 'application/json' }
             })
-            .catch(function () { load('data-token', TOKEN); });
-    } catch (e) {
-        load('data-token', TOKEN);
+                .then(function (r) { return r.ok ? r.json() : {}; })
+                .then(function (d) {
+                    if (d && d.session_token) {
+                        load('data-session-token', d.session_token, 'data-handshake-url', HANDSHAKE);
+                    } else {
+                        load('data-token', TOKEN); // Fallback: anonymer Public-Chatbot
+                    }
+                })
+                .catch(function () { load('data-token', TOKEN); });
+        } catch (e) {
+            load('data-token', TOKEN);
+        }
+    }
+
+    // Issue-Call erst nach der ersten echten Nutzer-Interaktion: Bots/Crawler
+    // erzeugen keine (und brauchen keinen Chat) — das schont das Session-Budget
+    // auf Aidanta-Seite massiv. Reale Besucher interagieren binnen Sekunden
+    // (Mausbewegung, Scroll, Touch), lange bevor sie den Chat oeffnen wuerden.
+    var interactionEvents = ['pointerdown', 'mousemove', 'scroll', 'keydown', 'touchstart'];
+    var interactionFired = false;
+
+    function onFirstInteraction() {
+        if (interactionFired) { return; }
+        interactionFired = true;
+        for (var i = 0; i < interactionEvents.length; i++) {
+            document.removeEventListener(interactionEvents[i], onFirstInteraction, true);
+        }
+        issueAndLoad();
+    }
+
+    for (var i = 0; i < interactionEvents.length; i++) {
+        document.addEventListener(interactionEvents[i], onFirstInteraction, { capture: true, passive: true });
     }
 })();
 </script>

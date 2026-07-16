@@ -16,9 +16,26 @@ $apiBaseUrl = (string) SdkRestApi::getParam('apiBaseUrl');
 $apiKey = (string) SdkRestApi::getParam('apiKey');
 $widgetToken = (string) SdkRestApi::getParam('widgetToken');
 $ttlSeconds = (int) SdkRestApi::getParam('ttlSeconds');
-$customer = (array) SdkRestApi::getParam('customer');
+$customerParam = SdkRestApi::getParam('customer');
+$customer = is_array($customerParam) ? $customerParam : [];
 
 $endpoint = rtrim($apiBaseUrl, '/').'/api/v1/chatbot/sessions/issue';
+
+$payload = [
+    'widget_token' => $widgetToken,
+    'ttl_seconds' => $ttlSeconds > 0 ? $ttlSeconds : 3600,
+];
+
+// Eingeloggter Kontakt: Kundenkontext + Visitor-Basisdaten mitgeben.
+// Gast (customer leer): beides weglassen -> Aidanta stellt eine anonyme
+// Gast-Session aus, die beim spaeteren Login hochgestuft wird.
+if (!empty($customer)) {
+    $payload['visitor'] = [
+        'name' => isset($customer['name']) ? $customer['name'] : null,
+        'email' => isset($customer['email']) ? $customer['email'] : null,
+    ];
+    $payload['customer'] = $customer;
+}
 
 try {
     $client = new Client(['timeout' => 5, 'connect_timeout' => 5]);
@@ -29,15 +46,7 @@ try {
             'Accept' => 'application/json',
             'Content-Type' => 'application/json',
         ],
-        'json' => [
-            'widget_token' => $widgetToken,
-            'visitor' => [
-                'name' => isset($customer['name']) ? $customer['name'] : null,
-                'email' => isset($customer['email']) ? $customer['email'] : null,
-            ],
-            'customer' => $customer,
-            'ttl_seconds' => $ttlSeconds > 0 ? $ttlSeconds : 3600,
-        ],
+        'json' => $payload,
         'http_errors' => false,
     ]);
 
