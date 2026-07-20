@@ -96,6 +96,11 @@ class HandshakeController extends Controller
             'ttlSeconds' => $ttlSeconds > 0 ? $ttlSeconds : 3600,
             // null/leer => anonyme Gast-Session ohne Kundenkontext.
             'customer' => $customer,
+            // Echte Client-IP des Shop-Besuchers (der Handshake laeuft same-origin
+            // im Browser-Request-Kontext). Aidanta braucht sie fuer Anzeige und
+            // Spam-Sperren — der Issue-Call selbst traegt nur die Egress-IP des
+            // plenty-Servers, die dafuer unbrauchbar ist.
+            'visitorIp' => $this->resolveClientIp($request),
         ]);
 
         $sessionToken = is_array($result) ? ($result['session_token'] ?? null) : null;
@@ -116,6 +121,23 @@ class HandshakeController extends Controller
             'session_token' => $sessionToken,
             'logged_in' => $contactId > 0,
         ]);
+    }
+
+    /**
+     * Client-IP des Shop-Besuchers — strikt nice-to-have: Der Handshake darf an
+     * der IP-Ermittlung NIE scheitern (dann lieber ohne IP ausstellen, Aidanta
+     * faellt auf die Egress-IP zurueck). Nur valide IPs zurueckgeben, sonst
+     * wuerde Aidantas Validierung (422) den kompletten Issue abbrechen.
+     */
+    private function resolveClientIp(Request $request): string
+    {
+        try {
+            $ip = trim((string) $request->ip());
+        } catch (\Throwable $e) {
+            return '';
+        }
+
+        return filter_var($ip, FILTER_VALIDATE_IP) !== false ? $ip : '';
     }
 
     /**

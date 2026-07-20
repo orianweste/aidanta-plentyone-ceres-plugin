@@ -18,6 +18,7 @@ $widgetToken = (string) SdkRestApi::getParam('widgetToken');
 $ttlSeconds = (int) SdkRestApi::getParam('ttlSeconds');
 $customerParam = SdkRestApi::getParam('customer');
 $customer = is_array($customerParam) ? $customerParam : [];
+$visitorIp = trim((string) SdkRestApi::getParam('visitorIp'));
 
 $endpoint = rtrim($apiBaseUrl, '/').'/api/v1/chatbot/sessions/issue';
 
@@ -26,14 +27,21 @@ $payload = [
     'ttl_seconds' => $ttlSeconds > 0 ? $ttlSeconds : 3600,
 ];
 
+// Echte Besucher-IP IMMER mitgeben (auch fuer Gaeste!) — ohne sie speichert
+// Aidanta die Egress-IP des plenty-Servers als "Besucher" und Spam-Sperren
+// treffen den falschen. Nur valide IPs senden (invalide -> 422 -> Issue tot).
+if ($visitorIp !== '' && filter_var($visitorIp, FILTER_VALIDATE_IP) !== false) {
+    $payload['visitor'] = ['ip' => $visitorIp];
+}
+
 // Eingeloggter Kontakt: Kundenkontext + Visitor-Basisdaten mitgeben.
 // Gast (customer leer): beides weglassen -> Aidanta stellt eine anonyme
 // Gast-Session aus, die beim spaeteren Login hochgestuft wird.
 if (!empty($customer)) {
-    $payload['visitor'] = [
-        'name' => isset($customer['name']) ? $customer['name'] : null,
-        'email' => isset($customer['email']) ? $customer['email'] : null,
-    ];
+    $visitor = isset($payload['visitor']) ? $payload['visitor'] : [];
+    $visitor['name'] = isset($customer['name']) ? $customer['name'] : null;
+    $visitor['email'] = isset($customer['email']) ? $customer['email'] : null;
+    $payload['visitor'] = $visitor;
     $payload['customer'] = $customer;
 }
 
